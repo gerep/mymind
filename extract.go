@@ -12,7 +12,15 @@ import (
 	"github.com/PuerkitoBio/goquery"
 )
 
-const maxExtractChars = 12000
+const (
+	maxExtractChars = 12000
+	maxImageBytes   = 20 * 1024 * 1024 // 20MB
+	maxHTMLBytes    = 5 * 1024 * 1024   // 5MB
+)
+
+var httpClient = &http.Client{
+	Timeout: 30 * time.Second,
+}
 
 var imageExtensions = map[string]string{
 	".jpg":  "image/jpeg",
@@ -21,7 +29,6 @@ var imageExtensions = map[string]string{
 	".gif":  "image/gif",
 	".webp": "image/webp",
 	".bmp":  "image/bmp",
-	".svg":  "image/svg+xml",
 }
 
 type Extracted struct {
@@ -51,33 +58,30 @@ func isImageURL(rawURL string) bool {
 		}
 	}
 
-	client := &http.Client{Timeout: 5 * time.Second}
-	resp, err := client.Head(rawURL)
-	if err == nil {
-		resp.Body.Close()
-		ct := resp.Header.Get("Content-Type")
-		if strings.HasPrefix(ct, "image/") {
-			return true
-		}
-	}
-
-	resp2, err := client.Get(rawURL)
+	req, err := http.NewRequest("HEAD", rawURL, nil)
 	if err != nil {
 		return false
 	}
-	resp2.Body.Close()
-	return strings.HasPrefix(resp2.Header.Get("Content-Type"), "image/")
+	req.Header.Set("User-Agent", "mymind/0.1")
+
+	resp, err := httpClient.Do(req)
+	if err == nil {
+		resp.Body.Close()
+		ct := resp.Header.Get("Content-Type")
+		return strings.HasPrefix(ct, "image/")
+	}
+
+	return false
 }
 
 func downloadImage(rawURL string) (ImageDownload, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
 	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {
 		return ImageDownload{}, err
 	}
 	req.Header.Set("User-Agent", "mymind/0.1")
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return ImageDownload{}, err
 	}
@@ -87,12 +91,20 @@ func downloadImage(rawURL string) (ImageDownload, error) {
 		return ImageDownload{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	data, err := io.ReadAll(resp.Body)
+	ct := resp.Header.Get("Content-Type")
+	if !strings.HasPrefix(ct, "image/") {
+		return ImageDownload{}, fmt.Errorf("not an image (Content-Type: %s)", ct)
+	}
+
+	limited := io.LimitReader(resp.Body, maxImageBytes+1)
+	data, err := io.ReadAll(limited)
 	if err != nil {
 		return ImageDownload{}, fmt.Errorf("reading image body: %w", err)
 	}
+	if len(data) > maxImageBytes {
+		return ImageDownload{}, fmt.Errorf("image too large (max %dMB)", maxImageBytes/(1024*1024))
+	}
 
-	ct := resp.Header.Get("Content-Type")
 	mime, ext := detectImageType(rawURL, ct)
 
 	return ImageDownload{
@@ -118,14 +130,13 @@ func detectImageType(rawURL, contentType string) (mime string, ext string) {
 }
 
 func extractFromURL(rawURL string) (Extracted, error) {
-	client := &http.Client{Timeout: 10 * time.Second}
 	req, err := http.NewRequest("GET", rawURL, nil)
 	if err != nil {
 		return Extracted{}, err
 	}
 	req.Header.Set("User-Agent", "mymind/0.1")
 
-	resp, err := client.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return Extracted{}, err
 	}
@@ -135,7 +146,8 @@ func extractFromURL(rawURL string) (Extracted, error) {
 		return Extracted{}, fmt.Errorf("HTTP %d", resp.StatusCode)
 	}
 
-	doc, err := goquery.NewDocumentFromReader(resp.Body)
+	limited := io.LimitReader(resp.Body, maxHTMLBytes)
+	doc, err := goquery.NewDocumentFromReader(limited)
 	if err != nil {
 		return Extracted{}, err
 	}

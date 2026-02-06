@@ -4,6 +4,7 @@ go 1.25.6
 
 require (
 	github.com/PuerkitoBio/goquery v1.11.0
+	github.com/joho/godotenv v1.5.1
 	google.golang.org/genai v1.45.0
 )
 
