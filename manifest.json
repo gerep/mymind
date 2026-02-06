@@ -1,0 +1,9 @@
+{
+  "id": "mymind",
+  "name": "mymind",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "AI-powered bookmarking — save links, images, tweets, and PDFs with automatic summaries",
+  "author": "gerep",
+  "isDesktopOnly": true
+}
