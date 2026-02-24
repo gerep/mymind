@@ -32,7 +32,7 @@ func main() {
 	flag.Usage = func() {
 		fmt.Fprintf(os.Stderr, "Usage:\n")
 		fmt.Fprintf(os.Stderr, "  mymind <link>              Analyze a web page, tweet, or image URL\n")
-		fmt.Fprintf(os.Stderr, "  mymind <note>              Analyze a text note\n")
+		fmt.Fprintf(os.Stderr, "  mymind note <text>         Analyze a text note\n")
 		fmt.Fprintf(os.Stderr, "  mymind <file.pdf>          Analyze a PDF file\n")
 		fmt.Fprintf(os.Stderr, "  mymind clipboard           Analyze image from clipboard\n")
 		fmt.Fprintf(os.Stderr, "  echo \"text\" | mymind -     Read note from stdin\n")
@@ -89,6 +89,9 @@ func main() {
 
 	args := flag.Args()
 	switch args[0] {
+	case "help":
+		flag.Usage()
+		return
 	case "search":
 		runSearch(*vault, args[1:])
 		return
@@ -113,10 +116,28 @@ func main() {
 		apiKey := requireAPIKey()
 		runScan(*vault, apiKey, *model, *prompt, args[1:])
 		return
+	case "note":
+		if len(args) < 2 {
+			fmt.Fprintln(os.Stderr, "usage: mymind note <text>")
+			os.Exit(1)
+		}
+		apiKey := requireAPIKey()
+		input := strings.Join(args[1:], " ")
+		content := ContentInput{Kind: "note", Text: input}
+		savePipeline(content, *vault, noteDir, apiKey, *model, *prompt, *dryRun)
+		return
+	}
+
+	input := strings.Join(args, " ")
+
+	if input != "clipboard" && input != "-" && !isURL(input) && !isPDF(input) {
+		fmt.Fprintf(os.Stderr, "error: unknown command %q\n", args[0])
+		fmt.Fprintf(os.Stderr, "To save a text note, use: mymind note <text>\n")
+		fmt.Fprintf(os.Stderr, "Run mymind -h for usage.\n")
+		os.Exit(1)
 	}
 
 	apiKey := requireAPIKey()
-	input := strings.Join(args, " ")
 
 	content, err := resolveInput(input)
 	if err != nil {
@@ -124,21 +145,25 @@ func main() {
 		os.Exit(1)
 	}
 
+	savePipeline(content, *vault, noteDir, apiKey, *model, *prompt, *dryRun)
+}
+
+func savePipeline(content ContentInput, vault, noteDir, apiKey, model, customPrompt string, dryRun bool) {
 	hash := contentHash(content)
-	notes, _ := loadNotes(*vault)
+	notes, _ := loadNotes(vault)
 	if dup := findDuplicate(notes, hash); dup != nil {
 		fmt.Fprintf(os.Stderr, "duplicate: already saved as %s\n", dup.Path)
 		os.Exit(0)
 	}
 
 	fmt.Println("Analyzing with AI...")
-	result, err := analyze(apiKey, *model, *prompt, content)
+	result, err := analyze(apiKey, model, customPrompt, content)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: AI analysis failed: %v\n", err)
 		os.Exit(1)
 	}
 
-	if *dryRun {
+	if dryRun {
 		md := renderMarkdown(content, result, hash)
 		fmt.Print(md)
 		return
@@ -150,7 +175,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	appendRelatedToNewNote(path, *vault)
+	appendRelatedToNewNote(path, vault)
 	fmt.Printf("Saved to %s\n", path)
 }
 
