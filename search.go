@@ -53,7 +53,7 @@ func runSearch(outDir string, args []string) {
 	for _, n := range matches {
 		date := n.Created.Format("2006-01-02")
 		tags := strings.Join(n.Tags, ", ")
-		fmt.Fprintf(os.Stdout, "%-12s %-40s [%s]  %s\n", date, n.Title, tags, n.Path)
+		fmt.Fprintf(os.Stdout, "%-12s %-40s [%s]  %s\n", date, n.Title, tags, obsidianLink(outDir, n.Path))
 	}
 }
 

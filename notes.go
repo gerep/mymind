@@ -4,6 +4,8 @@ import (
 	"bufio"
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
+	"net/url"
 	"os"
 	"path/filepath"
 	"sort"
@@ -189,4 +191,23 @@ func findDuplicate(notes []Note, hash string) *Note {
 		}
 	}
 	return nil
+}
+
+func obsidianURI(vault, notePath string) string {
+	vaultName := filepath.Base(vault)
+	rel, err := filepath.Rel(vault, notePath)
+	if err != nil {
+		return notePath
+	}
+	rel = strings.TrimSuffix(rel, ".md")
+	v := url.Values{}
+	v.Set("vault", vaultName)
+	v.Set("file", rel)
+	return "obsidian://open?" + v.Encode()
+}
+
+func obsidianLink(vault, notePath string) string {
+	uri := obsidianURI(vault, notePath)
+	label := filepath.Base(notePath)
+	return fmt.Sprintf("\033]8;;%s\033\\%s\033]8;;\033\\", uri, label)
 }
