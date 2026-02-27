@@ -43,6 +43,7 @@ func main() {
 		fmt.Fprintf(os.Stderr, "  mymind recap [--period 7d] Summarize recent notes\n")
 		fmt.Fprintf(os.Stderr, "  mymind link                Update related links between notes\n")
 		fmt.Fprintf(os.Stderr, "  mymind scan [-force]       Generate tags for existing notes in vault\n")
+		fmt.Fprintf(os.Stderr, "  mymind tui                 Interactive terminal UI for browsing notes\n")
 		fmt.Fprintf(os.Stderr, "\nFlags:\n")
 		flag.PrintDefaults()
 		fmt.Fprintf(os.Stderr, "\nEnvironment:\n")
@@ -91,6 +92,10 @@ func main() {
 	switch args[0] {
 	case "help":
 		flag.Usage()
+		return
+	case "tui":
+		apiKey := os.Getenv("GEMINI_API_KEY")
+		runTUI(*vault, noteDir, apiKey, *model, *prompt)
 		return
 	case "search":
 		runSearch(*vault, args[1:])
